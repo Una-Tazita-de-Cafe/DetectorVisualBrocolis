@@ -1,0 +1,37 @@
+25/Sep/2023  17:43 PM
+*********************************************************************************
+Brocoli: 1  tamaño x:40.00  tamaño Y: 46.17
+Brocoli: 2  tamaño x:39.00  tamaño Y: 45.08
+Brocoli: 3  tamaño x:74.00  tamaño Y: 86.24
+Brocoli: 4  tamaño x:77.00  tamaño Y: 90.16
+Brocoli: 5  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 6  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 7  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 8  tamaño x:14.00  tamaño Y: 16.77
+Brocoli: 9  tamaño x:12.00  tamaño Y: 14.62
+Brocoli: 10  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 11  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 12  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 13  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 14  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 15  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 16  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 17  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 18  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 19  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 20  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 21  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 22  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 23  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 24  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 25  tamaño x:29.00  tamaño Y: 31.68
+Brocoli: 26  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 27  tamaño x:322.00  tamaño Y: 296.80
+Brocoli: 28  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 29  tamaño x:0.00  tamaño Y: 0.00
+Brocoli: 30  tamaño x:15.00  tamaño Y: 15.49
+Brocoli: 31  tamaño x:15.00  tamaño Y: 15.48
+Brocoli: 32  tamaño x:15.00  tamaño Y: 15.45
+Brocoli: 33  tamaño x:15.00  tamaño Y: 15.36
+Brocoli: 34  tamaño x:7.00  tamaño Y: 9.80
+Brocoli: 35  tamaño x:14.00  tamaño Y: 14.50

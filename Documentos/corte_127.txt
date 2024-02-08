@@ -1,0 +1,8 @@
+02/Oct/2023  09:41 AM
+*********************************************************************************
+Brocoli: 1  tamaño x:59.00  tamaño Y: 52.58
+Brocoli: 2  tamaño x:52.00  tamaño Y: 172.46
+Brocoli: 3  tamaño x:6.00  tamaño Y: 9.72
+Brocoli: 4  tamaño x:33.00  tamaño Y: 82.91
+Brocoli: 5  tamaño x:118.00  tamaño Y: 345.23
+Brocoli: 6  tamaño x:24.00  tamaño Y: 47.69
