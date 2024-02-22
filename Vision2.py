@@ -134,6 +134,7 @@ class Vision_2:
             modbusClient.write_single_coil(elemento, accion) #cambiar despues por el Trigger para cortar el brocoli
             modbusClient.close() 
         except:
+            
             print("la Raspberry no esta conectado o esta en otra red")
             
             

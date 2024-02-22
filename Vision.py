@@ -21,7 +21,7 @@ class Vision_1:
     """Constructor (define la camara que se va a utilizar, estable la conexion para la base de datos y define los parametros para grabar )"""
     def __init__(self, puerto_camara=0,names="cam1"):
         self.names_Ca=names
-        self.serial_number={2:"241122305779",0:"234322304889"}      
+        self.serial_number={2:"241122305779",3:"234322304889",0:"215122252177"}      
         self.ConexionBaseDatos=Creacion(Datos)
         self.puerto_camara=puerto_camara
         
@@ -465,7 +465,7 @@ class Vision_1:
                 timeProcessing = time.time() - TimePerFrame_StartingPoint
 
                 tiempos.append(timeProcessing)
-            Archivo.close()
+            #Archivo.close()
             camara.release()
             Videoresult.release()
             #dc.release()
