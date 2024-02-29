@@ -19,12 +19,12 @@ import DatosConexion
 from flask import Flask, Response
 from flask_cors import CORS
 
-app=Flask(__name__)
+#app=Flask(__name__)
 class Vision_1:
     """Constructor (define la camara que se va a utilizar, estable la conexion para la base de datos y define los parametros para grabar )"""
     def __init__(self, puerto_camara=0,names="cam1", puerto_piston=6):
         self.names_Ca=names
-        self.serial_number={2:"241122305779",3:"234322304889",0:"215122252177"}      
+        self.serial_number={0:"241122305779",2:"234322304889",1:"215122252177"}      
         self.ConexionBaseDatos=Creacion(Datos)
         self.puerto_camara=puerto_camara
         self.puerto_pston=puerto_piston
@@ -307,7 +307,7 @@ class Vision_1:
         tiempo = 0
         #Archivo.write(f'{datetime.now().strftime("%d/%b/%Y")}  {datetime.now().strftime("%H:%M %p")}\n')
         #Archivo.write('*********************************************************************************\n')
-        Videoresult = cv2.VideoWriter(r'Muestra.avi', cv2.VideoWriter_fourcc(*'MJPG'), 30, (int(w), int(h)))
+        Videoresult = cv2.VideoWriter(r'Cam1.avi', cv2.VideoWriter_fourcc(*'MJPG'), 30, (int(w), int(h)))
         if camara.isOpened() :
             if CamaraOpenTimeFlag :  # sirve para poder mostrar el tiempo que tardado en la configuracion de todas sus parates
                 CameraOpen_EndingTime = time.time()
@@ -492,12 +492,12 @@ class Vision_1:
 
 obj=Vision_1()
 
-@app.route("/inicio")
+"""@app.route("/inicio")
 def inicio():
-    """Esta condicional inicializa el main() con los parametros de trabajo(rango de tamaño de cabezas) definido manualmente en codigo o recuperado de la base de datos"""        
+    #Esta condicional inicializa el main() con los parametros de trabajo(rango de tamaño de cabezas) definido manualmente en codigo o recuperado de la base de datos     
     obj.main([14,30])
 @app.route("/stream")
 def stream():
     return Response(obj.conversion_frame(),mimetype='multipart/x-mixed-replace; boundary=frame')
 if __name__ =="__main__":
-    app.run(host='0.0.0.0', debug=False)
+    app.run(host='0.0.0.0', debug=False)"""

@@ -15,16 +15,21 @@ from realsense_depth import *
 from ConexionDB import *
 import DatosConexion 
 
+"""Elementos para el servidor"""
+from flask import Flask, Response
+from flask_cors import CORS
 
-
+#app=Flask(__name__)
 class Vision_2:
     """Constructor (define la camara que se va a utilizar, estable la conexion para la base de datos y define los parametros para grabar )"""
-    def __init__(self, puerto_camara=0,names="cam1", puerto_piston=8):
+    def __init__(self, puerto_camara=0,names="cam1", puerto_piston=6):
         self.names_Ca=names
-        self.serial_number={2:"241122305779",0:"234322304889"}      
+        self.serial_number={0:"241122305779",2:"234322304889",1:"215122252177"}      
         self.ConexionBaseDatos=Creacion(Datos)
         self.puerto_camara=puerto_camara
-        self.puerto_piston=puerto_piston
+        self.puerto_pston=puerto_piston
+        self.trasmision_api=""
+        
     """Función utilizada para reconectar camara cuando esta es cambiada o desconectada"""
     def conexionCamara(self):
         camara = cv2.VideoCapture(self.puerto_camara)
@@ -111,19 +116,19 @@ class Vision_2:
          print(i)
      
     """Funcion encargada de mandar la seña de corte siempre que se cumpla la condicion de la distancia que ha recorido el implemento"""
-    def CorteConPila(self,velocidad, pilaT, distancia) :
-        if pilaT[len(pilaT)-1]!=0: 
-           
-            senal=(pilaT[1]+0.3-(0.015*velocidad))
-            delimitador=pilaT[1]+0.22
-            if senal<distancia and distancia>delimitador:
+    def CorteConPila(self,velocidad, pilaD, distancia) :
+        if pilaD[len(pilaD)-1]!=0: 
+           #señal =(Distancia a al que detecto el brocoli)+(Distancia a la que esta el centro de la cuchilla y el centro de LA Camara)-((latencia del piston)*Velovidad del implementos)  
+            senal_distancia_activacion=(pilaD[1]+0.47-(0.015*velocidad))
+            ### El 0.22 es un valor para evitar falsos positivos de activacion
+            if senal_distancia_activacion<distancia and distancia>(pilaD[1]+0.22):
                 print("cortar brocoli")
                 #solo cuando este conectado para evitar que se tarde el programa en funcionar
                 #self.Trigger(self.puerto_piston,1)
                 #self.Trigger(self.puerto_piston,0)
-                pilaT.pop(1)
-                return pilaT
-        return pilaT
+                pilaD.pop(1)
+                return pilaD
+        return pilaD
     
     
     """ Funcion que controla los trigger de la comunicacion de la RaspBerry mediante el protocolo de Modbus"""
@@ -134,7 +139,6 @@ class Vision_2:
             modbusClient.write_single_coil(elemento, accion) #cambiar despues por el Trigger para cortar el brocoli
             modbusClient.close() 
         except:
-            
             print("la Raspberry no esta conectado o esta en otra red")
             
             
@@ -163,8 +167,8 @@ class Vision_2:
         tam2 = tamPix * dista2
         return tam, tam2
 
-    """Funcion que nos dice la distancia que ha recorrido el implemento desde que inicio """
-    def distancias(self,tam, mean, depth) :
+    """Funcion que nos dice a que distancia promedio que hay del borcoli y la camara tomando en cuenta los puntos centrales del brocoli """
+    def distancia_promedio_del_brocoliCamara(self,tam, mean, depth) :
         vec = []
         contj = tam
         while contj >= -tam :
@@ -210,7 +214,7 @@ class Vision_2:
 
 
     """Programa Principal"""
-    def main(self,BroccoliAcceptedSizes) :
+    def main(self,BroccoliAcceptedSizes,rango) :
 
         print("Confirmacion Tamaño de Brocolis: ", BroccoliAcceptedSizes)
         print("Laseres Encendidos")
@@ -228,6 +232,8 @@ class Vision_2:
 
         # Variables y Constantes iniciadas
         BroccoliSizeMin, BroccoliSizeMax = BroccoliAcceptedSizes
+        Rangominimo,RangoMaximo=rango
+
         x1 = x2 = y1 = y2 = xmean = ymean = None
         showImageFlag = False
         NumberOfSlots = 20
@@ -243,7 +249,7 @@ class Vision_2:
         intentosReconexion = 0
         intentosDeReconexionAceptados = 5
         CamaraOpenTimeFlag = True
-        PilaTiempo = [0]
+        pila_distancia_recorrida = [0]
         distance = []
         tamano_RealX = 0
         tamano_RealY = 0
@@ -301,24 +307,25 @@ class Vision_2:
         tiempo = 0
         #Archivo.write(f'{datetime.now().strftime("%d/%b/%Y")}  {datetime.now().strftime("%H:%M %p")}\n')
         #Archivo.write('*********************************************************************************\n')
-        Videoresult = cv2.VideoWriter(r'Muestra.avi', cv2.VideoWriter_fourcc(*'MJPG'), 30, (int(w), int(h)))
+        Videoresult = cv2.VideoWriter(r'cam1.avi', cv2.VideoWriter_fourcc(*'MJPG'), 30, (int(w), int(h)))
         if camara.isOpened() :
             if CamaraOpenTimeFlag :  # sirve para poder mostrar el tiempo que tardado en la configuracion de todas sus parates
                 CameraOpen_EndingTime = time.time()
                 print("Tiempo de Inicio: ", CameraOpen_EndingTime - CameraOpen_StartingTime)
                 CamaraOpenTimeFlag = False
             while 1:
+
                 distancia = distancia + vel * (time.time() - tiempo)
                 TimePerFrame_StartingPoint = time.time()
-                FrameTimerStarting = time.time()
                
+
                 """octencion de vector rgb, profundida y datos del acelerometo"""
                 
                 ret, depth_frame, frame, accel = dc.get_frame()
                 
                 """**************Velocidad********************"""
                 
-                vel, accel_ant, sumA, tiempo = self.Velocidad(fondo, accel[1], accel_ant, sumaA, tiempo)
+                vel, accel_ant, sumaA, tiempo = self.Velocidad(fondo, accel[1], accel_ant, sumaA, tiempo)
                 
                 """******************Validacion de la coneccion de la camara*************************"""
                 while ret == False :
@@ -387,7 +394,7 @@ class Vision_2:
                     pixeles=x2-x1
                     
                     if y2 < 480 and x2 < 848 :
-                        distance = self.distancias(5, (ymean, xmean), depth_frame)
+                        distance = self.distancia_promedio_del_brocoliCamara(5, (ymean, xmean), depth_frame)
                         promedio = 0
                         cont = 0
                         # sacar el promedio de la distancia
@@ -434,8 +441,9 @@ class Vision_2:
                     if ban:
                         self.ConexionBaseDatos.Incremento(calibresBrocolis[tamano_RealX], 7)
                         self.ConexionBaseDatos.Incremento("CantidadCortada", 7)
-                        PilaTiempo.append(distancia)
-                        BroccolisCut+=1
+                        if (tamano_RealX<=Rangominimo and tamano_RealX<=RangoMaximo):
+                            pila_distancia_recorrida.append(distancia)
+                            BroccolisCut+=1
                     else:
                         if tamano_RealX<BroccoliSizeMin:
                             self.ConexionBaseDatos.Incremento(calibresBrocolis["menor"], 7)
@@ -445,13 +453,14 @@ class Vision_2:
                             self.ConexionBaseDatos.Incremento("CantidadPorEncima", 7)
                     self.ConexionBaseDatos.Incremento("CantidadObservada", 7)
                 bAnt = bAct.copy()
-                PilaTiempo = self.CorteConPila(vel, PilaTiempo, distancia)
+                pila_distancia_recorrida = self.CorteConPila(vel, pila_distancia_recorrida, distancia)
             
                 cv2.namedWindow(f"{self.names_Ca}", cv2.WINDOW_NORMAL)
                 cv2.imshow(f"{self.names_Ca}", frame)
-                
+                self.trasmision_api=frame
                 Videoresult.write(frame)
                 
+
                 # ***Datos de Medidas de Dispersion***
                 if cv2.waitKey(1) == ord("s") :
                     print("Tiempos de Procesamiento".center(50, "*"))
@@ -474,6 +483,21 @@ class Vision_2:
         else :
             print("Conectar Cámara para arranque")
 
+    """Metodo de trasmision a la api"""
+    def conversion_frame(self):
+        while 1:
+            ret, buffer = cv2.imencode('.jpg', self.trasmision_api)
+            frame = buffer.tobytes()
+            yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
 obj=Vision_2()
-"""Esta condicional inicializa el main() con los parametros de trabajo(rango de tamaño de cabezas) definido manualmente en codigo o recuperado de la base de datos"""        
-obj.main([14,30])
+
+"""@app.route("/inicio")
+def inicio():
+    #Esta condicional inicializa el main() con los parametros de trabajo(rango de tamaño de cabezas) definido manualmente en codigo o recuperado de la base de datos     
+    obj.main([14,30])
+@app.route("/stream")
+def stream():
+    return Response(obj.conversion_frame(),mimetype='multipart/x-mixed-replace; boundary=frame')
+if __name__ =="__main__":
+    app.run(host='0.0.0.0', debug=False)"""
