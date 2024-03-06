@@ -8,7 +8,8 @@ from datetime import datetime
 import math
 from Analizador import AnalizadorDiametro
 from Conexion import Conexion
-from easymodbus.modbusClient import ModbusClient
+#from easymodbus.modbusClient import ModbusClient
+from pymodbus.client.sync import ModbusTcpClient as ModbusClient
 from threading import Thread, Event
 import pyrealsense2
 from realsense_depth import *
@@ -19,12 +20,12 @@ import DatosConexion
 from flask import Flask, Response
 from flask_cors import CORS
 
-#app=Flask(__name__)
+app=Flask(__name__)
 class Vision_1:
     """Constructor (define la camara que se va a utilizar, estable la conexion para la base de datos y define los parametros para grabar )"""
     def __init__(self, puerto_camara=0,names="cam1", puerto_piston=6):
         self.names_Ca=names
-        self.serial_number={0:"241122305779",2:"234322304889",1:"215122252177"}      
+        self.serial_number={2:"241122305779",0:"234322304889",1:"215122252177"}      
         self.ConexionBaseDatos=Creacion(Datos)
         self.puerto_camara=puerto_camara
         self.puerto_pston=puerto_piston
@@ -134,9 +135,9 @@ class Vision_1:
     """ Funcion que controla los trigger de la comunicacion de la RaspBerry mediante el protocolo de Modbus"""
     def Trigger(self,elemento,accion):
         try:
-            modbusClient = ModbusClient('192.168.100.10', 502)
+            modbusClient = ModbusClient('192.168.0.115', 5020)
             modbusClient.connect()
-            modbusClient.write_single_coil(elemento, accion) #cambiar despues por el Trigger para cortar el brocoli
+            modbusClient.write_coil(elemento, accion) #cambiar despues por el Trigger para cortar el brocoli
             modbusClient.close() 
         except:
             print("la Raspberry no esta conectado o esta en otra red")
@@ -490,14 +491,43 @@ class Vision_1:
             frame = buffer.tobytes()
             yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-obj=Vision_1()
+obj=Vision_1(puerto_camara=1)
+#obj.main([14,30],[14,30])
 
-"""@app.route("/inicio")
+
+@app.route("/encendio/on/<trigger>")
+def encendio_componentes(trigger):
+    obj.Trigger(trigger, 1)
+    return "<p>jalo</p>"
+
+@app.route("/encendido/off<trigger>")
+def apagado_componentes(trigger):
+    obj.Trigger(trigger, 0)
+    return "<p>jalo</p>"
+
+@app.route("/encendido/LedAll-On")
+def encendio_total():
+    obj.Trigger(3, 1)
+    return "<p>jalo</p>"
+
+@app.route("/encendido/LedAll-Off")
+def apagado_total():
+    obj.Trigger(3, 0)
+    return "<p>jalo</p>"
+
+@app.route("/emergencia")
+def emergwencia():
+    obj.Trigger(0,0)
+    return "<p>Calmate perro que vas a matar a alguien</p>"
+
+@app.route("/inicio")
 def inicio():
     #Esta condicional inicializa el main() con los parametros de trabajo(rango de tamaño de cabezas) definido manualmente en codigo o recuperado de la base de datos     
-    obj.main([14,30])
+    obj.main([14,30],[14,30])
+    
+
 @app.route("/stream")
 def stream():
     return Response(obj.conversion_frame(),mimetype='multipart/x-mixed-replace; boundary=frame')
 if __name__ =="__main__":
-    app.run(host='0.0.0.0', debug=False)"""
+    app.run(host='0.0.0.0',port=8000, debug=False)

@@ -63,7 +63,7 @@ def stream2():
     return Response(obj.vision_2.conversion_frame(),mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ =="__main__":
-    app.run(host='0.0.0.0', debug=False)
+    app.run(host='0.0.0.0',port=8000, debug=False)
 # Iniciar los hilos
 
 #h1.start()

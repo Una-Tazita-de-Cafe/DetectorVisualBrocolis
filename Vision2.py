@@ -24,7 +24,7 @@ class Vision_2:
     """Constructor (define la camara que se va a utilizar, estable la conexion para la base de datos y define los parametros para grabar )"""
     def __init__(self, puerto_camara=0,names="cam1", puerto_piston=6):
         self.names_Ca=names
-        self.serial_number={0:"241122305779",2:"234322304889",1:"215122252177"}      
+        self.serial_number={0:"241122305779",0:"234322304889",1:"215122252177"}      
         self.ConexionBaseDatos=Creacion(Datos)
         self.puerto_camara=puerto_camara
         self.puerto_pston=puerto_piston
