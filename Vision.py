@@ -20,17 +20,18 @@ import DatosConexion
 from flask import Flask, Response
 from flask_cors import CORS
 
-app=Flask(__name__)
+#app=Flask(__name__)
 class Vision_1:
     """Constructor (define la camara que se va a utilizar, estable la conexion para la base de datos y define los parametros para grabar )"""
     def __init__(self, puerto_camara=0,names="cam1", puerto_piston=6):
         self.names_Ca=names
-        self.serial_number={2:"241122305779",0:"234322304889",1:"215122252177"}      
+        self.serial_number={3:"241122305779",2:"234322304889",1:"215122252177"}      
         self.ConexionBaseDatos=Creacion(Datos)
         self.puerto_camara=puerto_camara
         self.puerto_pston=puerto_piston
         self.trasmision_api=""
-        
+        self.seguridad=True
+        self.ciclo=True
     """Función utilizada para reconectar camara cuando esta es cambiada o desconectada"""
     def conexionCamara(self):
         camara = cv2.VideoCapture(self.puerto_camara)
@@ -47,12 +48,12 @@ class Vision_1:
         camara.set(cv2.CAP_PROP_FRAME_HEIGHT, 400)#400
         w = camara.get(cv2.CAP_PROP_FRAME_WIDTH)
         h = camara.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        h = int(h)
-        w = int(w)
+        h = int(480)
+        w = int(848)
         return camara, h, w
 
     """Función utilizada para establecer los ajustes de Configuración de YoloV5"""
-
+  
     def AjustesYoloV5(self,model, names) :
        
         SettingsFlag = True
@@ -102,7 +103,7 @@ class Vision_1:
         print("Ajustes Predeterminados Seleccionados...\n")
         model.conf = 0.5  # confidence threshold (0-1)
         model.iou = 0.5  # NMS IoU threshold (0-1)
-        model.classes =  0,46,47,49,50,51
+        model.classes =  0,51
         model.agnostic = False  # NMS class-agnostic
         model.multi_label = False  # NMS multiple labels per box
         model.max_det = 100  # maximum number of detections per image
@@ -162,11 +163,9 @@ class Vision_1:
     def TamanoBrocoli(self,diamtro_pixeles, distancia) :
         tam = 0
         dista1 = diamtro_pixeles[1] - diamtro_pixeles[0]
-        dista2 = diamtro_pixeles[3] - diamtro_pixeles[2]
         tamPix = distancia * 0.25 / 100
         tam = tamPix * dista1
-        tam2 = tamPix * dista2
-        return tam, tam2
+        return tam
 
     """Funcion que nos dice a que distancia promedio que hay del borcoli y la camara tomando en cuenta los puntos centrales del brocoli """
     def distancia_promedio_del_brocoliCamara(self,tam, mean, depth) :
@@ -195,7 +194,8 @@ class Vision_1:
         tiempo = time.time()
         ruido = []
         while (time.time() - tiempo) <= 2 :
-            ret2, depth_frame, color_frame, accel = dc.get_frame()
+            #ret2, depth_frame, color_frame, accel = dc.get_frame()
+            accel=dc.accel_data()
             ruido.append(accel[1])
         ruido = sum(ruido) / len(ruido)
         return ruido
@@ -240,7 +240,7 @@ class Vision_1:
         NumberOfSlots = 20
         bAnt = NumberOfSlots * [0]
         bAct = NumberOfSlots * [0]
-        AnalysisPictureFlag = 0
+
         BroccolisCounter = 0
         BroccolisCut=0
         tiempos = []
@@ -252,11 +252,11 @@ class Vision_1:
         CamaraOpenTimeFlag = True
         pila_distancia_recorrida = [0]
         distance = []
-        tamano_RealX = 0
-        tamano_RealY = 0
+        tamano_RealX = 0  
+    
         accel_ant = sumaA = vel = 0
         tiempo = 0
-        cont = self.busqueda()
+        #cont = self.busqueda()
         distancia = 0
        # Archivo = open(f'Documentos\corte_{cont}.txt', "w")
         calibresBrocolis={
@@ -308,13 +308,13 @@ class Vision_1:
         tiempo = 0
         #Archivo.write(f'{datetime.now().strftime("%d/%b/%Y")}  {datetime.now().strftime("%H:%M %p")}\n')
         #Archivo.write('*********************************************************************************\n')
-        Videoresult = cv2.VideoWriter(r'Cam1.avi', cv2.VideoWriter_fourcc(*'MJPG'), 30, (int(w), int(h)))
+        Videoresult = cv2.VideoWriter(r'video1.avi', cv2.VideoWriter_fourcc(*'MJPG'), 30, (int(w), int(h)))
         if camara.isOpened() :
             if CamaraOpenTimeFlag :  # sirve para poder mostrar el tiempo que tardado en la configuracion de todas sus parates
                 CameraOpen_EndingTime = time.time()
                 print("Tiempo de Inicio: ", CameraOpen_EndingTime - CameraOpen_StartingTime)
                 CamaraOpenTimeFlag = False
-            while 1:
+            while self.ciclo:
 
                 distancia = distancia + vel * (time.time() - tiempo)
                 TimePerFrame_StartingPoint = time.time()
@@ -355,9 +355,19 @@ class Vision_1:
                 # Ingreso del frame al modelo para analizar
                 results = model(frame, size=640)
                 # Obtencion de nombre y posicion del objeto detectado
-                labels = cord = results.xyxyn[0][:, :-1]
-                classes = labels.tolist()
-                infoPandas = results.pandas().xyxy[0]
+                cord = results.xyxyn[0][:, :-1]
+                infoPandas = results.pandas().xyxy[0]["name"].unique()
+
+
+                for i in infoPandas:
+                    if i =="person" :
+                        print("valio verga")
+                        #self.Trigger(3,1) #esata en espera para checar cual es la pocicio coreespondiente
+                        cv2.putText(frame, "Atencion, peligro", (0, h2+25), cv2.FONT_HERSHEY_SIMPLEX, 2.5, (0,0,0), 2)
+                        self.seguridad=False
+                        break
+                        
+
                 # Numero de objetos detectados en el video
                 objetosEnVideo = len(cord)
                 #print(classes[0])
@@ -365,12 +375,14 @@ class Vision_1:
                 Bb = np.squeeze(results.render())
                 # ***Ajustes de Lineas Visuales de los Bigotes de Gato***
 
+
                 if showImageFlag == True :
                     frame[0 :200, 0 :200] = lastImageTaken
 
                 # Muestra de Numero de objetos detectados en el Frame
                 # cv2.putText(frame, f'No. de Objetos: {objetosEnVideo}', (w-340, h-28), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 255, 124), 2)
-    
+                
+
                 """Datos de visualisacion"""
                 cv2.putText(frame, f"Brocolis Cortados:{BroccolisCut}", (w - 280, h - 38), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 230, 124), 2)
                 cv2.putText(frame, f"Brocolis Contados:{BroccolisCounter}", (w - 280, h - 68), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 255, 124), 2)
@@ -392,7 +404,7 @@ class Vision_1:
                     y2 = int(cord[j][3] * h)
                     xmean = int((x1 + x2) / 2)
                     ymean = int((y1 + y2) / 2)
-                    pixeles=x2-x1
+                    
                     
                     if y2 < 480 and x2 < 848 :
                         distance = self.distancia_promedio_del_brocoliCamara(5, (ymean, xmean), depth_frame)
@@ -404,10 +416,10 @@ class Vision_1:
                                 cont += 1
                                 promedio += distance[i]
                         if cont == 0 :
-                            tamano_RealX = tamano_RealY = 0
+                            tamano_RealX  = 0
                         else :
                             promedio = int((promedio / cont) / 10)
-                            tamano_RealX, tamano_RealY = self.TamanoBrocoli(([x1, x2, y1, y2]), promedio)
+                            tamano_RealX = self.TamanoBrocoli(([x1, x2, y1, y2]), promedio)
                         cv2.putText(frame, "{}cm".format(promedio), (x2, y2 - 20), cv2.FONT_HERSHEY_PLAIN, 1,(255, 255, 255), 2)
                         cv2.putText(frame, "tam:{:.2f}".format(tamano_RealX), (x2, y2), cv2.FONT_HERSHEY_PLAIN, 1,(0, 0, 255), 1)
                         distance.clear()
@@ -433,10 +445,10 @@ class Vision_1:
                 suma = sum(bAct) - sum(bAnt)
                
                 if suma > 0:
-                    dateOfDetection = datetime.now()
-                    AnalysisPictureFlag = 1
+                    #dateOfDetection = datetime.now()
+                    #AnalysisPictureFlag = 1
                     BroccolisCounter += 1
-                    idBroc = BroccolisCounter
+                    #idBroc = BroccolisCounter
                     #Archivo.write(f"Brocoli: {BroccolisCounter}  tamaño x:{bro[j][0]:.2f}  tamaño Y: {bro[j][1]:.2f}\n")
                     #Archivo.write(f"Brocoli: {BroccolisCounter}  tamaño x:{tamano_RealX}")
                     if ban:
@@ -458,8 +470,9 @@ class Vision_1:
             
                 cv2.namedWindow(f"{self.names_Ca}", cv2.WINDOW_NORMAL)
                 cv2.imshow(f"{self.names_Ca}", frame)
-                self.trasmision_api=frame
                 Videoresult.write(frame)
+                self.trasmision_api=frame
+                
                 
 
                 # ***Datos de Medidas de Dispersion***
@@ -477,13 +490,19 @@ class Vision_1:
 
                 tiempos.append(timeProcessing)
             #Archivo.close()
-            camara.release()
             Videoresult.release()
+            camara.release()
+            
             #dc.release()
             cv2.destroyAllWindows()
+            time.sleep(1)
+            #self.desconexion(camara,Videoresult)
         else :
             print("Conectar Cámara para arranque")
-
+    def desconexion(self,camara,Videoresult):
+        camara.release()
+        Videoresult.release()
+        cv2.destroyAllWindows()
     """Metodo de trasmision a la api"""
     def conversion_frame(self):
         while 1:
@@ -491,43 +510,41 @@ class Vision_1:
             frame = buffer.tobytes()
             yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-obj=Vision_1(puerto_camara=1)
+
+#obj=Vision_1(puerto_camara=0)
 #obj.main([14,30],[14,30])
 
+"""
+@app.route("/seguridad")
+def seguridad():
+    return {"valor":obj.seguridad}
 
-@app.route("/encendio/on/<trigger>")
+@app.route("/encendido/on/<trigger>")
 def encendio_componentes(trigger):
     obj.Trigger(trigger, 1)
     return "<p>jalo</p>"
 
-@app.route("/encendido/off<trigger>")
+@app.route("/encendido/off/<trigger>")
 def apagado_componentes(trigger):
     obj.Trigger(trigger, 0)
     return "<p>jalo</p>"
 
-@app.route("/encendido/LedAll-On")
-def encendio_total():
-    obj.Trigger(3, 1)
-    return "<p>jalo</p>"
-
-@app.route("/encendido/LedAll-Off")
-def apagado_total():
-    obj.Trigger(3, 0)
-    return "<p>jalo</p>"
-
-@app.route("/emergencia")
-def emergwencia():
-    obj.Trigger(0,0)
-    return "<p>Calmate perro que vas a matar a alguien</p>"
-
 @app.route("/inicio")
 def inicio():
     #Esta condicional inicializa el main() con los parametros de trabajo(rango de tamaño de cabezas) definido manualmente en codigo o recuperado de la base de datos     
+    obj.ciclo=True
     obj.main([14,30],[14,30])
+@app.route("/fin")
+def fin():
+    obj.ciclo=False
     
+    return "<p>se termino</p>"
+
 
 @app.route("/stream")
 def stream():
     return Response(obj.conversion_frame(),mimetype='multipart/x-mixed-replace; boundary=frame')
 if __name__ =="__main__":
     app.run(host='0.0.0.0',port=8000, debug=False)
+
+    """

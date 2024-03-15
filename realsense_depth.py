@@ -7,7 +7,6 @@ class DepthCamera() :
         # Configure depth and color streams
         self.pipeline = rs.pipeline()
         config = rs.config()
-        print("f")
         #241122305779
         #234322304889<
         config.enable_device(serial_number)
