@@ -8,23 +8,30 @@ from datetime import datetime
 import math
 from Analizador import AnalizadorDiametro
 from Conexion import Conexion
-from easymodbus.modbusClient import ModbusClient
+#from easymodbus.modbusClient import ModbusClient
+from pymodbus.client.sync import ModbusTcpClient as ModbusClient
 from threading import Thread, Event
 import pyrealsense2
 from realsense_depth import *
 from ConexionDB import *
 import DatosConexion 
 
+"""Elementos para el servidor"""
+from flask import Flask, Response
+from flask_cors import CORS
 
-
+#app=Flask(__name__)
 class Vision_1:
     """Constructor (define la camara que se va a utilizar, estable la conexion para la base de datos y define los parametros para grabar )"""
-    def __init__(self, puerto_camara=0,names="cam1"):
+    def __init__(self, puerto_camara=0,names="cam1", puerto_piston=6):
         self.names_Ca=names
-        self.serial_number={2:"241122305779",0:"234322304889"}      
+        self.serial_number={3:"241122305779",2:"234322304889",1:"215122252177"}      
         self.ConexionBaseDatos=Creacion(Datos)
         self.puerto_camara=puerto_camara
-        
+        self.puerto_pston=puerto_piston
+        self.trasmision_api=""
+        self.seguridad=True
+        self.ciclo=True
     """Función utilizada para reconectar camara cuando esta es cambiada o desconectada"""
     def conexionCamara(self):
         camara = cv2.VideoCapture(self.puerto_camara)
@@ -41,12 +48,12 @@ class Vision_1:
         camara.set(cv2.CAP_PROP_FRAME_HEIGHT, 400)#400
         w = camara.get(cv2.CAP_PROP_FRAME_WIDTH)
         h = camara.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        h = int(h)
-        w = int(w)
+        h = int(480)
+        w = int(848)
         return camara, h, w
 
     """Función utilizada para establecer los ajustes de Configuración de YoloV5"""
-
+  
     def AjustesYoloV5(self,model, names) :
        
         SettingsFlag = True
@@ -96,7 +103,7 @@ class Vision_1:
         print("Ajustes Predeterminados Seleccionados...\n")
         model.conf = 0.5  # confidence threshold (0-1)
         model.iou = 0.5  # NMS IoU threshold (0-1)
-        model.classes =  0,46,47,49,50,51
+        model.classes =  0,51
         model.agnostic = False  # NMS class-agnostic
         model.multi_label = False  # NMS multiple labels per box
         model.max_det = 100  # maximum number of detections per image
@@ -111,27 +118,27 @@ class Vision_1:
          print(i)
      
     """Funcion encargada de mandar la seña de corte siempre que se cumpla la condicion de la distancia que ha recorido el implemento"""
-    def CorteConPila(self,velocidad, pilaT, distancia) :
-        if pilaT[len(pilaT)-1]!=0: 
-           
-            senal=(pilaT[1]+0.3-(0.015*velocidad))
-            delimitador=pilaT[1]+0.22
-            if senal<distancia and distancia>delimitador:
+    def CorteConPila(self,velocidad, pilaD, distancia) :
+        if pilaD[len(pilaD)-1]!=0: 
+           #señal =(Distancia a al que detecto el brocoli)+(Distancia a la que esta el centro de la cuchilla y el centro de LA Camara)-((latencia del piston)*Velovidad del implementos)  
+            senal_distancia_activacion=(pilaD[1]+0.47-(0.015*velocidad))
+            ### El 0.22 es un valor para evitar falsos positivos de activacion
+            if senal_distancia_activacion<distancia and distancia>(pilaD[1]+0.22):
                 print("cortar brocoli")
                 #solo cuando este conectado para evitar que se tarde el programa en funcionar
-                #self.Trigger(7,1)
-                #self.Trigger(7,0)
-                pilaT.pop(1)
-                return pilaT
-        return pilaT
+                #self.Trigger(self.puerto_piston,1)
+                #self.Trigger(self.puerto_piston,0)
+                pilaD.pop(1)
+                return pilaD
+        return pilaD
     
     
     """ Funcion que controla los trigger de la comunicacion de la RaspBerry mediante el protocolo de Modbus"""
     def Trigger(self,elemento,accion):
         try:
-            modbusClient = ModbusClient('192.168.100.10', 502)
+            modbusClient = ModbusClient('192.168.0.115', 5020)
             modbusClient.connect()
-            modbusClient.write_single_coil(elemento, accion) #cambiar despues por el Trigger para cortar el brocoli
+            modbusClient.write_coil(elemento, accion) #cambiar despues por el Trigger para cortar el brocoli
             modbusClient.close() 
         except:
             print("la Raspberry no esta conectado o esta en otra red")
@@ -156,14 +163,12 @@ class Vision_1:
     def TamanoBrocoli(self,diamtro_pixeles, distancia) :
         tam = 0
         dista1 = diamtro_pixeles[1] - diamtro_pixeles[0]
-        dista2 = diamtro_pixeles[3] - diamtro_pixeles[2]
         tamPix = distancia * 0.25 / 100
         tam = tamPix * dista1
-        tam2 = tamPix * dista2
-        return tam, tam2
+        return tam
 
-    """Funcion que nos dice la distancia que ha recorrido el implemento desde que inicio """
-    def distancias(self,tam, mean, depth) :
+    """Funcion que nos dice a que distancia promedio que hay del borcoli y la camara tomando en cuenta los puntos centrales del brocoli """
+    def distancia_promedio_del_brocoliCamara(self,tam, mean, depth) :
         vec = []
         contj = tam
         while contj >= -tam :
@@ -189,7 +194,8 @@ class Vision_1:
         tiempo = time.time()
         ruido = []
         while (time.time() - tiempo) <= 2 :
-            ret2, depth_frame, color_frame, accel = dc.get_frame()
+            #ret2, depth_frame, color_frame, accel = dc.get_frame()
+            accel=dc.accel_data()
             ruido.append(accel[1])
         ruido = sum(ruido) / len(ruido)
         return ruido
@@ -209,7 +215,7 @@ class Vision_1:
 
 
     """Programa Principal"""
-    def main(self,BroccoliAcceptedSizes) :
+    def main(self,BroccoliAcceptedSizes,rango) :
 
         print("Confirmacion Tamaño de Brocolis: ", BroccoliAcceptedSizes)
         print("Laseres Encendidos")
@@ -227,12 +233,14 @@ class Vision_1:
 
         # Variables y Constantes iniciadas
         BroccoliSizeMin, BroccoliSizeMax = BroccoliAcceptedSizes
+        Rangominimo,RangoMaximo=rango
+
         x1 = x2 = y1 = y2 = xmean = ymean = None
         showImageFlag = False
         NumberOfSlots = 20
         bAnt = NumberOfSlots * [0]
         bAct = NumberOfSlots * [0]
-        AnalysisPictureFlag = 0
+
         BroccolisCounter = 0
         BroccolisCut=0
         tiempos = []
@@ -242,13 +250,13 @@ class Vision_1:
         intentosReconexion = 0
         intentosDeReconexionAceptados = 5
         CamaraOpenTimeFlag = True
-        PilaTiempo = [0]
+        pila_distancia_recorrida = [0]
         distance = []
-        tamano_RealX = 0
-        tamano_RealY = 0
+        tamano_RealX = 0  
+    
         accel_ant = sumaA = vel = 0
         tiempo = 0
-        cont = self.busqueda()
+        #cont = self.busqueda()
         distancia = 0
        # Archivo = open(f'Documentos\corte_{cont}.txt', "w")
         calibresBrocolis={
@@ -300,24 +308,25 @@ class Vision_1:
         tiempo = 0
         #Archivo.write(f'{datetime.now().strftime("%d/%b/%Y")}  {datetime.now().strftime("%H:%M %p")}\n')
         #Archivo.write('*********************************************************************************\n')
-        Videoresult = cv2.VideoWriter(r'Muestra.avi', cv2.VideoWriter_fourcc(*'MJPG'), 30, (int(w), int(h)))
+        Videoresult = cv2.VideoWriter(r'video1.avi', cv2.VideoWriter_fourcc(*'MJPG'), 30, (int(w), int(h)))
         if camara.isOpened() :
             if CamaraOpenTimeFlag :  # sirve para poder mostrar el tiempo que tardado en la configuracion de todas sus parates
                 CameraOpen_EndingTime = time.time()
                 print("Tiempo de Inicio: ", CameraOpen_EndingTime - CameraOpen_StartingTime)
                 CamaraOpenTimeFlag = False
-            while 1:
+            while self.ciclo:
+
                 distancia = distancia + vel * (time.time() - tiempo)
                 TimePerFrame_StartingPoint = time.time()
-                FrameTimerStarting = time.time()
                
+
                 """octencion de vector rgb, profundida y datos del acelerometo"""
                 
                 ret, depth_frame, frame, accel = dc.get_frame()
                 
                 """**************Velocidad********************"""
                 
-                vel, accel_ant, sumA, tiempo = self.Velocidad(fondo, accel[1], accel_ant, sumaA, tiempo)
+                vel, accel_ant, sumaA, tiempo = self.Velocidad(fondo, accel[1], accel_ant, sumaA, tiempo)
                 
                 """******************Validacion de la coneccion de la camara*************************"""
                 while ret == False :
@@ -346,9 +355,19 @@ class Vision_1:
                 # Ingreso del frame al modelo para analizar
                 results = model(frame, size=640)
                 # Obtencion de nombre y posicion del objeto detectado
-                labels = cord = results.xyxyn[0][:, :-1]
-                classes = labels.tolist()
-                infoPandas = results.pandas().xyxy[0]
+                cord = results.xyxyn[0][:, :-1]
+                infoPandas = results.pandas().xyxy[0]["name"].unique()
+
+
+                for i in infoPandas:
+                    if i =="person" :
+                        print("valio verga")
+                        #self.Trigger(3,1) #esata en espera para checar cual es la pocicio coreespondiente
+                        cv2.putText(frame, "Atencion, peligro", (0, h2+25), cv2.FONT_HERSHEY_SIMPLEX, 2.5, (0,0,0), 2)
+                        self.seguridad=False
+                        break
+                        
+
                 # Numero de objetos detectados en el video
                 objetosEnVideo = len(cord)
                 #print(classes[0])
@@ -356,12 +375,14 @@ class Vision_1:
                 Bb = np.squeeze(results.render())
                 # ***Ajustes de Lineas Visuales de los Bigotes de Gato***
 
+
                 if showImageFlag == True :
                     frame[0 :200, 0 :200] = lastImageTaken
 
                 # Muestra de Numero de objetos detectados en el Frame
                 # cv2.putText(frame, f'No. de Objetos: {objetosEnVideo}', (w-340, h-28), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 255, 124), 2)
-    
+                
+
                 """Datos de visualisacion"""
                 cv2.putText(frame, f"Brocolis Cortados:{BroccolisCut}", (w - 280, h - 38), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 230, 124), 2)
                 cv2.putText(frame, f"Brocolis Contados:{BroccolisCounter}", (w - 280, h - 68), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 255, 124), 2)
@@ -383,10 +404,10 @@ class Vision_1:
                     y2 = int(cord[j][3] * h)
                     xmean = int((x1 + x2) / 2)
                     ymean = int((y1 + y2) / 2)
-                    pixeles=x2-x1
+                    
                     
                     if y2 < 480 and x2 < 848 :
-                        distance = self.distancias(5, (ymean, xmean), depth_frame)
+                        distance = self.distancia_promedio_del_brocoliCamara(5, (ymean, xmean), depth_frame)
                         promedio = 0
                         cont = 0
                         # sacar el promedio de la distancia
@@ -395,10 +416,10 @@ class Vision_1:
                                 cont += 1
                                 promedio += distance[i]
                         if cont == 0 :
-                            tamano_RealX = tamano_RealY = 0
+                            tamano_RealX  = 0
                         else :
                             promedio = int((promedio / cont) / 10)
-                            tamano_RealX, tamano_RealY = self.TamanoBrocoli(([x1, x2, y1, y2]), promedio)
+                            tamano_RealX = self.TamanoBrocoli(([x1, x2, y1, y2]), promedio)
                         cv2.putText(frame, "{}cm".format(promedio), (x2, y2 - 20), cv2.FONT_HERSHEY_PLAIN, 1,(255, 255, 255), 2)
                         cv2.putText(frame, "tam:{:.2f}".format(tamano_RealX), (x2, y2), cv2.FONT_HERSHEY_PLAIN, 1,(0, 0, 255), 1)
                         distance.clear()
@@ -424,17 +445,18 @@ class Vision_1:
                 suma = sum(bAct) - sum(bAnt)
                
                 if suma > 0:
-                    dateOfDetection = datetime.now()
-                    AnalysisPictureFlag = 1
+                    #dateOfDetection = datetime.now()
+                    #AnalysisPictureFlag = 1
                     BroccolisCounter += 1
-                    idBroc = BroccolisCounter
+                    #idBroc = BroccolisCounter
                     #Archivo.write(f"Brocoli: {BroccolisCounter}  tamaño x:{bro[j][0]:.2f}  tamaño Y: {bro[j][1]:.2f}\n")
                     #Archivo.write(f"Brocoli: {BroccolisCounter}  tamaño x:{tamano_RealX}")
                     if ban:
                         self.ConexionBaseDatos.Incremento(calibresBrocolis[tamano_RealX], 7)
                         self.ConexionBaseDatos.Incremento("CantidadCortada", 7)
-                        PilaTiempo.append(distancia)
-                        BroccolisCut+=1
+                        if (tamano_RealX<=Rangominimo and tamano_RealX<=RangoMaximo):
+                            pila_distancia_recorrida.append(distancia)
+                            BroccolisCut+=1
                     else:
                         if tamano_RealX<BroccoliSizeMin:
                             self.ConexionBaseDatos.Incremento(calibresBrocolis["menor"], 7)
@@ -444,13 +466,15 @@ class Vision_1:
                             self.ConexionBaseDatos.Incremento("CantidadPorEncima", 7)
                     self.ConexionBaseDatos.Incremento("CantidadObservada", 7)
                 bAnt = bAct.copy()
-                PilaTiempo = self.CorteConPila(vel, PilaTiempo, distancia)
+                pila_distancia_recorrida = self.CorteConPila(vel, pila_distancia_recorrida, distancia)
             
                 cv2.namedWindow(f"{self.names_Ca}", cv2.WINDOW_NORMAL)
                 cv2.imshow(f"{self.names_Ca}", frame)
-                
                 Videoresult.write(frame)
+                self.trasmision_api=frame
                 
+                
+
                 # ***Datos de Medidas de Dispersion***
                 if cv2.waitKey(1) == ord("s") :
                     print("Tiempos de Procesamiento".center(50, "*"))
@@ -465,14 +489,62 @@ class Vision_1:
                 timeProcessing = time.time() - TimePerFrame_StartingPoint
 
                 tiempos.append(timeProcessing)
-            Archivo.close()
-            camara.release()
+            #Archivo.close()
             Videoresult.release()
+            camara.release()
+            
             #dc.release()
             cv2.destroyAllWindows()
+            time.sleep(1)
+            #self.desconexion(camara,Videoresult)
         else :
             print("Conectar Cámara para arranque")
+    def desconexion(self,camara,Videoresult):
+        camara.release()
+        Videoresult.release()
+        cv2.destroyAllWindows()
+    """Metodo de trasmision a la api"""
+    def conversion_frame(self):
+        while 1:
+            ret, buffer = cv2.imencode('.jpg', self.trasmision_api)
+            frame = buffer.tobytes()
+            yield (b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-obj=Vision_1()
-"""Esta condicional inicializa el main() con los parametros de trabajo(rango de tamaño de cabezas) definido manualmente en codigo o recuperado de la base de datos"""        
-obj.main([14,30])
+
+#obj=Vision_1(puerto_camara=0)
+#obj.main([14,30],[14,30])
+
+"""
+@app.route("/seguridad")
+def seguridad():
+    return {"valor":obj.seguridad}
+
+@app.route("/encendido/on/<trigger>")
+def encendio_componentes(trigger):
+    obj.Trigger(trigger, 1)
+    return "<p>jalo</p>"
+
+@app.route("/encendido/off/<trigger>")
+def apagado_componentes(trigger):
+    obj.Trigger(trigger, 0)
+    return "<p>jalo</p>"
+
+@app.route("/inicio")
+def inicio():
+    #Esta condicional inicializa el main() con los parametros de trabajo(rango de tamaño de cabezas) definido manualmente en codigo o recuperado de la base de datos     
+    obj.ciclo=True
+    obj.main([14,30],[14,30])
+@app.route("/fin")
+def fin():
+    obj.ciclo=False
+    
+    return "<p>se termino</p>"
+
+
+@app.route("/stream")
+def stream():
+    return Response(obj.conversion_frame(),mimetype='multipart/x-mixed-replace; boundary=frame')
+if __name__ =="__main__":
+    app.run(host='0.0.0.0',port=8000, debug=False)
+
+    """
